@@ -1,6 +1,6 @@
-import { readFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { RailpointError } from './output.ts'
 
 export type Credentials = {
@@ -12,15 +12,33 @@ export type NamecheapAuth = { apiUser: string; apiKey: string; username: string;
 
 export const configPath = () => join(process.env.RAILPOINT_CONFIG_DIR ?? join(homedir(), '.railpoint'), 'config.json')
 
+type ConfigFile = { railwayToken?: string; namecheap?: Partial<Credentials['namecheap']> }
+
+function readConfig(): ConfigFile {
+  try {
+    return JSON.parse(readFileSync(configPath(), 'utf8'))
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw new RailpointError('INTERNAL', `Cannot read ${configPath()}: ${(e as Error).message}`)
+    return {}
+  }
+}
+
+// Unset values are left out, so they never overwrite what the file already has.
+const defined = (o: object = {}) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined))
+
+// Merges into the config file, which holds secrets: the file is 0600 and its directory 0700.
+export function saveCredentials(partial: ConfigFile): void {
+  const file = readConfig()
+  const path = configPath()
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+  writeFileSync(path, JSON.stringify({ ...file, ...defined(partial), namecheap: { ...file.namecheap, ...defined(partial.namecheap) } }, null, 2) + '\n', { mode: 0o600 })
+  chmodSync(path, 0o600) // `mode` only applies when the file is created
+}
+
 // The environment wins over ~/.railpoint/config.json, value by value.
 export function loadCredentials(): Credentials {
   const env = process.env
-  let file: Partial<Credentials> = {}
-  try {
-    file = JSON.parse(readFileSync(configPath(), 'utf8'))
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw new RailpointError('INTERNAL', `Cannot read ${configPath()}: ${(e as Error).message}`)
-  }
+  const file = readConfig()
   const namecheap = file.namecheap ?? { sandbox: false }
   const apiUser = env.NAMECHEAP_API_USER || namecheap.apiUser
   return {
