@@ -1,0 +1,20 @@
+{
+  "data": {
+    "customDomainCreate": {
+      "id": "domain-id",
+      "domain": "app.example.com",
+      "status": {
+        "dnsRecords": [
+          {
+            "hostlabel": "app",
+            "recordType": "DNS_RECORD_TYPE_CNAME",
+            "requiredValue": "routing-value.up.railway.app",
+            "purpose": "DNS_RECORD_PURPOSE_TRAFFIC_ROUTE"
+          }
+        ],
+        "verificationDnsHost": "verification-host.app",
+        "verificationToken": "verification-token"
+      }
+    }
+  }
+}
