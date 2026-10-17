@@ -1,7 +1,7 @@
 import { test, beforeEach, mock } from 'node:test'
 import { fixture, stubFetch } from './stub.ts'
 import assert from 'node:assert/strict'
-import { customDomainCreate, resolveTarget } from '../src/railway.ts'
+import { customDomainCreate, listProjects, resolveTarget } from '../src/railway.ts'
 
 
 const projects = {
@@ -57,13 +57,32 @@ test('resolveTarget with no match is TARGET_AMBIGUOUS listing the candidates', a
 })
 
 test('errors[] in a 200 is RAILWAY_ERROR with the first message', async () => {
-  stubFetch({ data: null, errors: [{ message: 'Not Authorized' }, { message: 'second' }] })
-  await assert.rejects(resolveTarget('tok', { project: 'p', environment: 'e', service: 's' }), { code: 'RAILWAY_ERROR', message: 'Not Authorized' })
+  stubFetch({ data: null, errors: [{ message: 'Project not found' }, { message: 'second' }] })
+  await assert.rejects(resolveTarget('tok', { project: 'p', environment: 'e', service: 's' }), { code: 'RAILWAY_ERROR', message: 'Project not found' })
 })
 
 test('a non-2xx response is RAILWAY_ERROR', async () => {
   stubFetch(new Response('bad gateway', { status: 502 }))
   await assert.rejects(resolveTarget('tok', { project: 'p', environment: 'e', service: 's' }), { code: 'RAILWAY_ERROR' })
+})
+
+test('listProjects with an account token asks me once', async () => {
+  const calls = stubFetch(fixture('me'))
+  assert.deepEqual(await listProjects('tok'), [{ id: 'project-id-1', name: 'my-app', environments: [{ id: 'environment-id-1', name: 'production' }], services: [{ id: 'service-id-1', name: 'api' }] }])
+  assert.equal(calls.length, 1)
+})
+
+test('listProjects with a workspace token falls back to projects on Not Authorized', async () => {
+  const calls = stubFetch(fixture('notAuthorized'), fixture('projects'))
+  assert.deepEqual(await listProjects('tok'), [{ id: 'project-id-2', name: 'team-app', environments: [{ id: 'environment-id-2', name: 'production' }], services: [{ id: 'service-id-2', name: 'web' }] }])
+  assert.equal(calls.length, 2)
+  assert.match(calls[1].query, /^query \{ projects\(first: 500\)/)
+})
+
+test('listProjects does not fall back on any other Railway error', async () => {
+  const calls = stubFetch({ data: null, errors: [{ message: 'Problem processing request' }] })
+  await assert.rejects(listProjects('tok'), { code: 'RAILWAY_ERROR', message: 'Problem processing request' })
+  assert.equal(calls.length, 1)
 })
 
 const target = { projectId: 'p1', project: 'my-app', environmentId: 'e1', environment: 'production', serviceId: 's3', service: 'web' }

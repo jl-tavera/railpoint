@@ -1,0 +1,15 @@
+{
+  "data": {
+    "me": {
+      "workspaces": [
+        {
+          "projects": {
+            "edges": [
+              { "node": { "id": "project-id-1", "name": "my-app", "environments": { "edges": [{ "node": { "id": "environment-id-1", "name": "production" } }] }, "services": { "edges": [{ "node": { "id": "service-id-1", "name": "api" } }] } } }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
