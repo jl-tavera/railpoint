@@ -1,7 +1,7 @@
 {
   "name": "railpoint",
   "version": "0.1.0",
-  "description": "Link a Railway service to a custom domain on Namecheap, in one command.",
+  "description": "Create or link a Railway service on a custom domain on Namecheap, in one command.",
   "type": "module",
   "license": "MIT",
   "engines": {

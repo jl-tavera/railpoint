@@ -6,7 +6,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
 </p>
 
-CLI that links a Railway service to a custom domain on Namecheap — in one command.
+CLI that links a Railway service to a custom domain on Namecheap — or creates the service from a GitHub repo first — in one command.
 
 Inspired by [doomain](https://github.com/crafter-station/doomain), scoped to just Namecheap + Railway.
 
@@ -34,6 +34,12 @@ export NAMECHEAP_API_USER=...
 export NAMECHEAP_API_KEY=...
 
 npx railpoint link app.example.com --project my-app --service my-api
+```
+
+No service yet? `create` makes the project and the service from a GitHub repo, then links the domain:
+
+```sh
+npx railpoint create app.example.com --repo acme/my-api
 ```
 
 ## How it works
@@ -79,6 +85,29 @@ railpoint link <domain> --project <name|id> --service <name|id> [--environment <
 
 Any other flag, or a missing required one, prints this usage and exits 1.
 
+## `create` flags
+
+```
+railpoint create <domain> --repo <owner/name> [--project <name|id>] [--service <name>] [--branch <b>] [--force] [--timeout <s>] [--no-wait] [--json]
+```
+
+`create` reuses the project and the service when they exist and creates them when they don't: the project with a
+`production` environment, the service from the repo (Railway starts its first deploy). Then it runs `link`'s three
+steps on that service. Re-running creates nothing new, so a second run is the status check. It waits for the
+domain, not the build.
+
+| Flag | Default | What it does |
+| --- | --- | --- |
+| `--repo <owner/name>` | required | The GitHub repo the service deploys. Railway's GitHub app needs access to it. |
+| `--project <name\|id>` | the repo's name | The Railway project, created if no project has that name. |
+| `--service <name>` | the repo's name | The service, created from the repo if the project has none by that name. |
+| `--branch <b>` | the repo's default | The branch a new service deploys. |
+| `--no-wait`, `--timeout <s>`, `--force`, `--json` | | As for `link`. |
+
+A new project goes in the account's only workspace, or the token's workspace for a workspace token. An account
+with several workspaces fails with `TARGET_AMBIGUOUS`; use a workspace token or an existing `--project`. The JSON
+`data` is `link`'s, plus `projectCreated` and `serviceCreated`.
+
 ## Environment variables
 
 Each credential overrides the same value in `~/.railpoint/config.json`.
@@ -95,7 +124,8 @@ Each credential overrides the same value in `~/.railpoint/config.json`.
 
 ## What it touches
 
-Only the custom domain on Railway and the two records in "How it works". Nothing else is touched. Namecheap's API replaces a whole zone at once, so railpoint reads every host record
+Only the custom domain on Railway and the two records in "How it works" (and, for `create`, the project and
+service it creates). Nothing else is touched. Namecheap's API replaces a whole zone at once, so railpoint reads every host record
 before it writes anything. It writes every other record back as it was, along with the zone's email setting. If a routing record at that host already points elsewhere, railpoint asks first (or needs
 `--force`), then replaces the routing records at that host. A zone that doesn't use Namecheap BasicDNS is
 refused, not changed.
@@ -122,7 +152,7 @@ With `--json`, or whenever stdout isn't a terminal, railpoint prints one JSON li
 | `TARGET_AMBIGUOUS` | A project, environment or service name matches more than one, or none. |
 | `UNSUPPORTED_RECORD` | Railway asks for a record railpoint can't write to this zone. |
 | `TIMEOUT` | Not ready within `--timeout`. Re-run later. |
-| `RAILWAY_ERROR` | The Railway API returned an error. |
+| `RAILWAY_ERROR` | The Railway API returned an error, such as a `--repo` its GitHub app can't reach. |
 | `NAMECHEAP_ERROR` | The Namecheap API returned any other error. |
 | `INTERNAL` | Anything else. |
 

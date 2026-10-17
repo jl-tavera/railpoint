@@ -2,6 +2,7 @@ import { test, beforeEach, mock } from 'node:test'
 import assert from 'node:assert/strict'
 import { fixture, stubFetch, xml } from './stub.ts'
 import { create } from '../src/link.ts'
+import { main } from '../src/cli.ts'
 
 const project = (id: string, name: string, services: [string, string][]) => ({
   node: { id, name, environments: { edges: [{ node: { id: `${id}-prod`, name: 'production' } }] }, services: { edges: services.map(([id, name]) => ({ node: { id, name } })) } },
@@ -75,4 +76,18 @@ test('a repo Railway cannot reach fails with RAILWAY_ERROR and Railway\'s messag
   await assert.rejects(create(opts), { code: 'RAILWAY_ERROR', message })
   assert.equal(calls.length, 4)
   assert.ok(calls.every((c) => c.url.includes('railway')))
+})
+
+test('create without --repo, with a repo that is not owner/name, or with a flag of the other command, prints usage and exits 1', async (t) => {
+  const stderr = t.mock.method(process.stderr, 'write', () => true)
+  const calls = stubFetch()
+  const usage = [
+    ['create', 'app.example.com'],
+    ['create', 'app.example.com', '--repo', 'shop'],
+    ['create', 'app.example.com', '--repo', 'acme/shop', '--environment', 'staging'],
+    ['link', 'app.example.com', '--project', 'my-app', '--service', 'api', '--repo', 'acme/shop'],
+  ]
+  for (const argv of usage) assert.equal(await main([...argv, '--json']), 1)
+  assert.equal(calls.length, 0)
+  assert.match(String(stderr.mock.calls[0].arguments[0]), /railpoint create <domain> --repo <owner\/name>/)
 })
