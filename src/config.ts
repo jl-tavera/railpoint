@@ -8,6 +8,8 @@ export type Credentials = {
   namecheap: { apiUser?: string; apiKey?: string; username?: string; clientIp?: string; sandbox: boolean }
 }
 
+export type NamecheapAuth = { apiUser: string; apiKey: string; username: string; clientIp: string; sandbox: boolean }
+
 export const configPath = () => join(process.env.RAILPOINT_CONFIG_DIR ?? join(homedir(), '.railpoint'), 'config.json')
 
 // The environment wins over ~/.railpoint/config.json, value by value.
