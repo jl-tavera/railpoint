@@ -49,17 +49,28 @@ async function gql<T>(token: string, query: string, variables: Record<string, un
   return body.data
 }
 
-function pick<T extends Named>(kind: string, items: T[], want: string): T {
+const candidates = (items: Named[]) => items.map((i) => `${i.name} (${i.id})`).join(', ') || 'none'
+
+// The one item named or numbered `want`, or undefined when there is none; more than one is never guessed.
+export function find<T extends Named>(kind: string, items: T[], want: string): T | undefined {
   const hits = items.filter((i) => i.id === want || i.name === want)
-  if (hits.length === 1) return hits[0]
-  const list = (hits.length ? hits : items).map((i) => `${i.name} (${i.id})`).join(', ') || 'none'
-  const message = hits.length ? `${hits.length} ${kind}s match "${want}": ${list}` : `No ${kind} matches "${want}". Candidates: ${list}`
-  throw new RailpointError('TARGET_AMBIGUOUS', message, `pass the ${kind} id`)
+  if (hits.length > 1) throw new RailpointError('TARGET_AMBIGUOUS', `${hits.length} ${kind}s match "${want}": ${candidates(hits)}`, `pass the ${kind} id`)
+  return hits[0]
+}
+
+function pick<T extends Named>(kind: string, items: T[], want: string): T {
+  const hit = find(kind, items, want)
+  if (!hit) throw new RailpointError('TARGET_AMBIGUOUS', `No ${kind} matches "${want}". Candidates: ${candidates(items)}`, `pass the ${kind} id`)
+  return hit
 }
 
 const ids = (t: Target) => ({ projectId: t.projectId, environmentId: t.environmentId, serviceId: t.serviceId })
 
 const nodes = <T>(e: Edges<T>) => e.edges.map((x) => x.node)
+
+// Railway answers `me` only for account tokens; a workspace token gets "Not Authorized".
+// lazy: keyed on Railway's message text; key on the error's `path: ['me']` if Railway rewords it
+const refusesMe = (e: unknown) => e instanceof RailpointError && e.message === 'Not Authorized'
 
 export type Project = Named & { environments: Named[]; services: Named[] }
 
@@ -75,12 +86,35 @@ export async function listProjects(token: string): Promise<Project[]> {
     const data = await gql<{ me: { workspaces: { projects: RawProjects }[] } }>(token, `query { me { workspaces { ${PROJECTS} } } }`)
     raw = data.me.workspaces.map((w) => w.projects)
   } catch (e) {
-    // Railway answers `me` only for account tokens; a workspace token sees its projects at the top level.
-    // lazy: keyed on Railway's message text; key on the error's `path: ['me']` if Railway rewords it
-    if (!(e instanceof RailpointError && e.message === 'Not Authorized')) throw e
+    // A workspace token sees its projects at the top level.
+    if (!refusesMe(e)) throw e
     raw = [(await gql<{ projects: RawProjects }>(token, `query { ${PROJECTS} }`)).projects]
   }
   return raw.flatMap(nodes).map((p) => ({ ...p, environments: nodes(p.environments), services: nodes(p.services) }))
+}
+
+// The workspace a new project goes in: the account's only one, or none for a workspace token (Railway knows it).
+async function workspaceId(token: string): Promise<string | undefined> {
+  let workspaces: Named[]
+  try {
+    workspaces = (await gql<{ me: { workspaces: Named[] } }>(token, 'query { me { workspaces { id name } } }')).me.workspaces
+  } catch (e) {
+    if (refusesMe(e)) return undefined
+    throw e
+  }
+  if (workspaces.length === 1) return workspaces[0].id
+  throw new RailpointError('TARGET_AMBIGUOUS', `Your account has ${workspaces.length} workspaces: ${candidates(workspaces)}`, 'use a workspace token for the one to create in, or pass --project with an existing project')
+}
+
+export async function projectCreate(token: string, name: string): Promise<string> {
+  const input = { name, defaultEnvironmentName: 'production', workspaceId: await workspaceId(token) }
+  return (await gql<{ projectCreate: { id: string } }>(token, 'mutation ($input: ProjectCreateInput!) { projectCreate(input: $input) { id } }', { input })).projectCreate.id
+}
+
+// Railway starts the first deploy of a service with a repo source itself.
+export async function serviceCreate(token: string, projectId: string, name: string, repo: string, branch?: string): Promise<string> {
+  const input = { projectId, name, source: { repo }, branch }
+  return (await gql<{ serviceCreate: { id: string } }>(token, 'mutation ($input: ServiceCreateInput!) { serviceCreate(input: $input) { id } }', { input })).serviceCreate.id
 }
 
 export async function resolveTarget(token: string, want: { project: string; environment: string; service: string }): Promise<Target> {
