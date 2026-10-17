@@ -126,6 +126,8 @@ With `--json`, or whenever stdout isn't a terminal, railpoint prints one JSON li
 | `NAMECHEAP_ERROR` | The Namecheap API returned any other error. |
 | `INTERNAL` | Anything else. |
 
+An agent can run this for you: install the skill in [`skills/railpoint`](skills/railpoint/SKILL.md) by copying or symlinking it into `~/.claude/skills/railpoint`.
+
 ## License
 
 MIT

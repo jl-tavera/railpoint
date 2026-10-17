@@ -22,7 +22,8 @@
     "railpoint": "dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "skills"
   ],
   "scripts": {
     "test": "node --test",
