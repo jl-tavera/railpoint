@@ -1,0 +1,9 @@
+{
+  "data": {
+    "projects": {
+      "edges": [
+        { "node": { "id": "project-id-2", "name": "team-app", "environments": { "edges": [{ "node": { "id": "environment-id-2", "name": "production" } }] }, "services": { "edges": [{ "node": { "id": "service-id-2", "name": "web" } }] } } }
+      ]
+    }
+  }
+}

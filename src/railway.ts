@@ -63,14 +63,24 @@ const nodes = <T>(e: Edges<T>) => e.edges.map((x) => x.node)
 
 export type Project = Named & { environments: Named[]; services: Named[] }
 
-// Every project the token can see, with its environments and services, in one query.
+type RawProjects = Edges<Named & { environments: Edges<Named>; services: Edges<Named> }>
+
+const PROJECTS = `projects(first: 500) { edges { node { id name environments { edges { node { id name } } } services { edges { node { id name } } } } } }`
+
+// Every project the token can see, with its environments and services, in one query (two for a workspace token).
 export async function listProjects(token: string): Promise<Project[]> {
-  // lazy: only the token owner's workspaces (first 500 projects each); add externalWorkspaces when a shared project is needed
-  const data = await gql<{ me: { workspaces: { projects: Edges<Named & { environments: Edges<Named>; services: Edges<Named> }> }[] } }>(
-    token,
-    `query { me { workspaces { projects(first: 500) { edges { node { id name environments { edges { node { id name } } } services { edges { node { id name } } } } } } } } }`,
-  )
-  return data.me.workspaces.flatMap((w) => nodes(w.projects)).map((p) => ({ ...p, environments: nodes(p.environments), services: nodes(p.services) }))
+  let raw: RawProjects[]
+  try {
+    // lazy: only the token owner's workspaces (first 500 projects each); add externalWorkspaces when a shared project is needed
+    const data = await gql<{ me: { workspaces: { projects: RawProjects }[] } }>(token, `query { me { workspaces { ${PROJECTS} } } }`)
+    raw = data.me.workspaces.map((w) => w.projects)
+  } catch (e) {
+    // Railway answers `me` only for account tokens; a workspace token sees its projects at the top level.
+    // lazy: keyed on Railway's message text; key on the error's `path: ['me']` if Railway rewords it
+    if (!(e instanceof RailpointError && e.message === 'Not Authorized')) throw e
+    raw = [(await gql<{ projects: RawProjects }>(token, `query { ${PROJECTS} }`)).projects]
+  }
+  return raw.flatMap(nodes).map((p) => ({ ...p, environments: nodes(p.environments), services: nodes(p.services) }))
 }
 
 export async function resolveTarget(token: string, want: { project: string; environment: string; service: string }): Promise<Target> {
