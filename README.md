@@ -14,7 +14,7 @@ Inspired by [doomain](https://github.com/crafter-station/doomain), scoped to jus
 
 ```sh
 railpoint                                          # interactive wizard
-railpoint link app.example.com --service my-api    # scripted
+railpoint link app.example.com --project my-app --service my-api    # scripted
 ```
 
 ## Requires
