@@ -12,8 +12,8 @@ Inspired by [doomain](https://github.com/crafter-station/doomain), scoped to jus
 
 ## Quickstart
 
-You need Node 24.2 or later, a [Railway API token](https://railway.com/account/tokens), and a domain on
-Namecheap that uses Namecheap BasicDNS.
+You need Node 24.2 or later, a [Railway API token](https://railway.com/account/tokens) (an account or a
+workspace token; project tokens aren't supported), and a domain on Namecheap that uses Namecheap BasicDNS.
 
 1. **Turn on the Namecheap API and whitelist your IP.** In Namecheap, go to Profile → Tools → Namecheap API
    Access, turn the API on, copy the API key, and add this machine's public IP (`curl https://api.ipify.org`)
