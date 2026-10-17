@@ -39,3 +39,16 @@ export function requireRailway(creds: Credentials): string {
   if (!creds.railwayToken) throw new RailpointError('MISSING_CREDENTIALS', 'RAILWAY_TOKEN is not set', `export RAILWAY_TOKEN, or put railwayToken in ${configPath()}`)
   return creds.railwayToken
 }
+
+// The client IP Namecheap checks against its whitelist: NAMECHEAP_CLIENT_IP, else this machine's public IP.
+export async function requireNamecheap(creds: Credentials): Promise<NamecheapAuth> {
+  const { apiUser, apiKey, username, clientIp, sandbox } = creds.namecheap
+  for (const [name, value] of [['NAMECHEAP_API_USER', apiUser], ['NAMECHEAP_API_KEY', apiKey]]) {
+    if (!value) throw new RailpointError('MISSING_CREDENTIALS', `${name} is not set`, `export ${name}, or put namecheap in ${configPath()}`)
+  }
+  const ip = clientIp || await fetch('https://api.ipify.org', { signal: AbortSignal.timeout(2_000) })
+    .then((r) => (r.ok ? r.text() : ''), () => '')
+    .then((t) => t.trim())
+  if (!ip) throw new RailpointError('MISSING_CREDENTIALS', 'Could not find this machine\'s public IP from api.ipify.org', 'export NAMECHEAP_CLIENT_IP with the IP whitelisted at Namecheap')
+  return { apiUser: apiUser!, apiKey: apiKey!, username: username!, clientIp: ip, sandbox }
+}
