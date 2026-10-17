@@ -112,3 +112,29 @@ export async function customDomainCreate(token: string, target: Target, domain: 
   )
   return toDomain(data.customDomainCreate)
 }
+
+export type RecordStatus = { hostlabel: string; requiredValue: string; currentValue: string; ready: boolean }
+
+export type DomainStatus = { records: RecordStatus[]; certificateStatus: string; certificateIssued: boolean }
+
+type RawStatus = {
+  dnsRecords: { hostlabel: string; requiredValue: string; currentValue: string; status: string }[]
+  verificationDnsHost: string | null
+  verificationToken: string | null
+  verified: boolean
+  certificateStatus: string
+}
+
+// Railway's own words for "valid" and "issued" (DNSRecordStatus, CertificateStatus).
+export async function customDomainStatus(token: string, id: string, projectId: string): Promise<DomainStatus> {
+  const data = await gql<{ customDomain: { status: RawStatus } }>(
+    token,
+    `query ($id: String!, $projectId: String!) { customDomain(id: $id, projectId: $projectId) { status { dnsRecords { hostlabel requiredValue currentValue status } verificationDnsHost verificationToken verified certificateStatus } } }`,
+    { id, projectId },
+  )
+  const s = data.customDomain.status
+  const records = s.dnsRecords.map(({ status, ...r }) => ({ ...r, ready: status === 'DNS_RECORD_STATUS_PROPAGATED' }))
+  // The verification TXT record has no status or current value of its own; Railway reports it as `verified`.
+  if (s.verificationToken) records.push({ hostlabel: s.verificationDnsHost ?? '', requiredValue: s.verificationToken, currentValue: 'not verified yet', ready: s.verified })
+  return { records, certificateStatus: s.certificateStatus, certificateIssued: s.certificateStatus === 'CERTIFICATE_STATUS_TYPE_VALID' }
+}
