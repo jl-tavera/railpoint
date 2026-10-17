@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util'
-import { spinner } from '@clack/prompts'
-import { loadCredentials, requireRailway } from './config.ts'
-import { link, type LinkResult } from './link.ts'
+import { confirm, spinner } from '@clack/prompts'
+import { loadCredentials, requireNamecheap, requireRailway } from './config.ts'
+import { describeConflict, link, type LinkResult } from './link.ts'
 import { fail, isJson, ok } from './output.ts'
 
-const USAGE = 'usage: railpoint link <domain> --project <name|id> --service <name|id> [--environment <name|id>] [--json]'
+const USAGE = 'usage: railpoint link <domain> --project <name|id> --service <name|id> [--environment <name|id>] [--force] [--json]'
 
 function table(rows: string[][]): string {
   const widths = rows[0].map((_, i) => Math.max(...rows.map((r) => r[i].length)))
@@ -17,9 +17,9 @@ function render(r: LinkResult): string {
   return [
     `${r.created ? 'Added' : 'Already on'} ${project} / ${environment} / ${service}: ${r.domain}`,
     '',
-    'Add these records at Namecheap:',
+    `${r.written ? 'Wrote' : 'Nothing to write in'} Namecheap zone ${r.zone}:`,
     '',
-    table([['HOST', 'TYPE', 'VALUE'], ...r.records.map((x) => [x.host, x.type, x.value])]),
+    table([['', 'HOST', 'TYPE', 'VALUE'], ...r.changes.map((c) => [c.action, c.record.name, c.record.type, c.record.address])]),
   ].join('\n')
 }
 
@@ -33,6 +33,7 @@ export async function main(argv: string[]): Promise<number> {
         project: { type: 'string' },
         service: { type: 'string' },
         environment: { type: 'string', default: 'production' },
+        force: { type: 'boolean', default: false },
         json: { type: 'boolean', default: false },
       },
     })
@@ -40,7 +41,7 @@ export async function main(argv: string[]): Promise<number> {
     parsed = undefined
   }
   const [command, domain, ...extra] = parsed?.positionals ?? []
-  const { project, service, environment, json } = parsed?.values ?? {}
+  const { project, service, environment, force = false, json } = parsed?.values ?? {}
   if (command !== 'link' || !domain || extra.length || !project || !service || !environment) {
     process.stderr.write(USAGE + '\n')
     return 1
@@ -49,10 +50,19 @@ export async function main(argv: string[]): Promise<number> {
   const asJson = isJson({ json })
   const spin = asJson ? undefined : spinner({ output: process.stderr })
   try {
-    const token = requireRailway(loadCredentials())
-    spin?.start(`Adding ${domain} on Railway`)
-    const result = await link({ domain, project, environment, service, token })
-    spin?.stop('Railway has the domain')
+    const creds = loadCredentials()
+    const token = requireRailway(creds)
+    const namecheap = await requireNamecheap(creds)
+    spin?.start(`Linking ${domain}`)
+    const result = await link({ domain, project, environment, service, token, namecheap, force }, {
+      confirm: spin && (async (conflicts) => {
+        spin.stop('A routing record already points elsewhere')
+        const yes = await confirm({ message: `Replace it?\n${conflicts.map(describeConflict).join('\n')}`, initialValue: false })
+        spin.start(`Linking ${domain}`)
+        return yes === true
+      }),
+    })
+    spin?.stop('Linked')
     ok(result, asJson, () => render(result))
     return 0
   } catch (err) {
