@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { CANCEL_SYMBOL } from '@clack/prompts'
+import { main } from '../src/cli.ts'
 import { configPath, saveCredentials } from '../src/config.ts'
 import { runWizard, type Prompts } from '../src/wizard.ts'
 import { stubFetch } from './stub.ts'
@@ -83,3 +84,33 @@ test('a cancel returns nothing, saves nothing and calls no API', async () => {
   assert.equal(calls.length, 0)
   assert.throws(() => saved(), { code: 'ENOENT' })
 })
+
+// Runs the CLI as if stdin and stdout were (or were not) a terminal, capturing stderr.
+async function cli(argv: string[], tty: boolean, p?: Prompts) {
+  const err: string[] = []
+  const was = [process.stdin.isTTY, process.stdout.isTTY]
+  process.stdin.isTTY = process.stdout.isTTY = tty
+  const write = mock.method(process.stderr, 'write', (chunk: string) => (err.push(chunk), true))
+  const code = await main(argv, { prompts: p }).finally(() => {
+    write.mock.restore()
+    ;[process.stdin.isTTY, process.stdout.isTTY] = was
+  })
+  return { code, stderr: err.join('') }
+}
+
+test('no arguments in a terminal runs the wizard; a cancel there exits 0', async () => {
+  const { asked, prompts: p } = prompts(CANCEL_SYMBOL)
+  const { code } = await cli([], true, p)
+  assert.equal(code, 0)
+  assert.equal(asked[0].message, 'Railway API token')
+})
+
+for (const [argv, tty] of [[['--json'], true], [[], false]] as const) {
+  test(`no command with ${tty ? '--json' : 'no terminal'} prints usage and exits 1`, async () => {
+    const { asked, prompts: p } = prompts()
+    const { code, stderr } = await cli([...argv], tty, p)
+    assert.equal(code, 1)
+    assert.match(stderr, /^usage: railpoint/)
+    assert.equal(asked.length, 0)
+  })
+}
