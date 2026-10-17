@@ -3,11 +3,12 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { stripVTControlCharacters } from 'node:util'
 import { CANCEL_SYMBOL } from '@clack/prompts'
 import { main } from '../src/cli.ts'
 import { configPath, saveCredentials } from '../src/config.ts'
 import { runWizard, type Prompts } from '../src/wizard.ts'
-import { stubFetch } from './stub.ts'
+import { fixture, stubFetch, xml } from './stub.ts'
 
 beforeEach(() => {
   mock.restoreAll()
@@ -36,10 +37,12 @@ const projects = { data: { me: { workspaces: [{ projects: { edges: [node('p1', '
 // Answers each prompt from the script in order; a select answer is an option label. Records what was asked.
 function prompts(...answers: (string | symbol)[]) {
   const asked: { kind: string; message: string; initialValue?: string; options?: string[] }[] = []
+  const errors: string[] = []
   const next = () => answers.length ? answers.shift()! : assert.fail(`unexpected prompt: ${asked.at(-1)?.message}`)
   const p = {
     intro: () => {},
     cancel: () => {},
+    log: { message: () => {}, error: (m: string) => errors.push(stripVTControlCharacters(m)) },
     password: async (o: { message: string }) => (asked.push({ kind: 'password', message: o.message }), next()),
     text: async (o: { message: string; initialValue?: string }) => (asked.push({ kind: 'text', message: o.message, initialValue: o.initialValue }), next()),
     select: async (o: { message: string; options: { label?: string; value: unknown }[] }) => {
@@ -48,7 +51,7 @@ function prompts(...answers: (string | symbol)[]) {
       return typeof a === 'symbol' ? a : o.options.find((x) => x.label === a)!.value
     },
   }
-  return { asked, prompts: p as unknown as Prompts }
+  return { asked, errors, prompts: p as unknown as Prompts }
 }
 
 test('missing credentials are asked, saved, and the chosen ids come back as link options', async () => {
@@ -102,7 +105,7 @@ test('no arguments in a terminal runs the wizard; a cancel there exits 0', async
   const { asked, prompts: p } = prompts(CANCEL_SYMBOL)
   const { code } = await cli([], true, p)
   assert.equal(code, 0)
-  assert.equal(asked[0].message, 'Railway API token')
+  assert.match(stripVTControlCharacters(asked[0].message), /^Railway API token\n.*railway\.com\/account\/tokens/)
 })
 
 for (const [argv, tty] of [[['--json'], true], [[], false]] as const) {
@@ -114,3 +117,23 @@ for (const [argv, tty] of [[['--json'], true], [[], false]] as const) {
     assert.equal(asked.length, 0)
   })
 }
+
+test('a wrong Railway token in the wizard names the token and links where to fix it', async () => {
+  stubFetch('198.51.100.9\n', fixture('notAuthorized'), fixture('notAuthorized'))
+  const { errors, prompts: p } = prompts('bad', 'user', 'key', '198.51.100.9')
+  const { code, stderr } = await cli([], true, p)
+  assert.equal(code, 1)
+  assert.doesNotMatch(stderr, /error RAILWAY/)
+  assert.match(errors[0], /Railway rejected the API token.*https:\/\/railway\.com\/account\/tokens/s)
+})
+
+test('a wrong Namecheap key in the wizard names the key and links where to fix it', async () => {
+  const badKey = xml('error-ip').replace('Invalid request IP: 203.0.113.7', 'API Key is invalid or API access has not been enabled')
+  const existing = { data: { domains: { customDomains: [fixture('customDomain').data.customDomain] } } }
+  stubFetch('198.51.100.9\n', projects, projects, existing, badKey)
+  const { errors, prompts: p } = prompts('tok', 'user', 'bad', '198.51.100.9', 'my-app', 'production', 'api', 'app.example.com')
+  const { code, stderr } = await cli([], true, p)
+  assert.equal(code, 1)
+  assert.doesNotMatch(stderr, /error NAMECHEAP|NAMECHEAP_API_KEY/)
+  assert.match(errors[0], /Namecheap rejected the API user or key.*https:\/\/ap\.www\.namecheap\.com\/settings\/tools\/apiaccess\//s)
+})

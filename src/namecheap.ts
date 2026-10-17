@@ -9,7 +9,8 @@ const parser = new XMLParser({
   isArray: (name) => ['Error', 'Domain', 'host'].includes(name),
 })
 
-const whitelistPage = (sandbox: boolean) => `https://ap.www.${sandbox ? 'sandbox.' : ''}namecheap.com/settings/tools/apiaccess/whitelisted-ips`
+export const apiAccessPage = (sandbox: boolean) => `https://ap.www.${sandbox ? 'sandbox.' : ''}namecheap.com/settings/tools/apiaccess/`
+export const whitelistPage = (sandbox: boolean) => `${apiAccessPage(sandbox)}whitelisted-ips`
 
 function toError(auth: NamecheapAuth, text: string): RailpointError {
   if (/\bIP\b/.test(text) && /whitelist|invalid/i.test(text)) {

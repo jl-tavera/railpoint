@@ -4,7 +4,7 @@ import { cancel, confirm, spinner } from '@clack/prompts'
 import { loadCredentials, requireNamecheap, requireRailway } from './config.ts'
 import { create, describeConflict, link, type CreateOptions, type CreateResult, type LinkDeps, type LinkOptions, type LinkResult } from './link.ts'
 import { fail, isJson, ok } from './output.ts'
-import { answer, Cancelled, runWizard, type Prompts } from './wizard.ts'
+import { answer, Cancelled, runWizard, showError, type Prompts } from './wizard.ts'
 
 const USAGE = 'usage: railpoint                (interactive, in a terminal)\n       railpoint link <domain> --project <name|id> --service <name|id> [--environment <name|id>] [--force] [--timeout <s>] [--no-wait] [--json]\n       railpoint create <domain> --repo <owner/name> [--project <name|id>] [--service <name>] [--branch <b>] [--force] [--timeout <s>] [--no-wait] [--json]'
 
@@ -27,7 +27,7 @@ function render(r: LinkResult | CreateResult): string {
 }
 
 // The one link path, for the command and the wizard alike: `options` resolves inside the error handling.
-async function run(options: () => Promise<LinkOptions | CreateOptions | undefined>, asJson: boolean, deps: LinkDeps): Promise<number> {
+async function run(options: () => Promise<LinkOptions | CreateOptions | undefined>, asJson: boolean, deps: LinkDeps, report = (err: unknown) => fail(err, asJson)): Promise<number> {
   const spin = asJson ? undefined : spinner({ output: process.stderr })
   try {
     const opts = await options()
@@ -54,7 +54,7 @@ async function run(options: () => Promise<LinkOptions | CreateOptions | undefine
       cancel('cancelled')
       return 0
     }
-    fail(err, asJson)
+    report(err)
     return 1
   }
 }
@@ -62,7 +62,7 @@ async function run(options: () => Promise<LinkOptions | CreateOptions | undefine
 // No arguments in a terminal runs the wizard; it never runs headless, so anything else needs a command.
 export async function main(argv: string[], deps: LinkDeps & { prompts?: Prompts } = {}): Promise<number> {
   const { prompts, ...linkDeps } = deps
-  if (!argv.length && process.stdin.isTTY && process.stdout.isTTY) return run(() => runWizard(prompts), false, linkDeps)
+  if (!argv.length && process.stdin.isTTY && process.stdout.isTTY) return run(() => runWizard(prompts), false, linkDeps, (err) => showError(err, prompts))
   let parsed
   try {
     parsed = parseArgs({
