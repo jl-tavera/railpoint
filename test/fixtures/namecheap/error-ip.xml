@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ApiResponse Status="ERROR" xmlns="http://api.namecheap.com/xml.response">
+  <Errors>
+    <Error Number="1011150">Invalid request IP: 203.0.113.7</Error>
+  </Errors>
+  <Warnings />
+  <RequestedCommand />
+  <Server>PHX01APIEXT01</Server>
+  <ExecutionTime>0</ExecutionTime>
+</ApiResponse>
