@@ -61,15 +61,22 @@ const ids = (t: Target) => ({ projectId: t.projectId, environmentId: t.environme
 
 const nodes = <T>(e: Edges<T>) => e.edges.map((x) => x.node)
 
-export async function resolveTarget(token: string, want: { project: string; environment: string; service: string }): Promise<Target> {
+export type Project = Named & { environments: Named[]; services: Named[] }
+
+// Every project the token can see, with its environments and services, in one query.
+export async function listProjects(token: string): Promise<Project[]> {
   // lazy: only the token owner's workspaces (first 500 projects each); add externalWorkspaces when a shared project is needed
   const data = await gql<{ me: { workspaces: { projects: Edges<Named & { environments: Edges<Named>; services: Edges<Named> }> }[] } }>(
     token,
     `query { me { workspaces { projects(first: 500) { edges { node { id name environments { edges { node { id name } } } services { edges { node { id name } } } } } } } } }`,
   )
-  const project = pick('project', data.me.workspaces.flatMap((w) => nodes(w.projects)), want.project)
-  const environment = pick('environment', nodes(project.environments), want.environment)
-  const service = pick('service', nodes(project.services), want.service)
+  return data.me.workspaces.flatMap((w) => nodes(w.projects)).map((p) => ({ ...p, environments: nodes(p.environments), services: nodes(p.services) }))
+}
+
+export async function resolveTarget(token: string, want: { project: string; environment: string; service: string }): Promise<Target> {
+  const project = pick('project', await listProjects(token), want.project)
+  const environment = pick('environment', project.environments, want.environment)
+  const service = pick('service', project.services, want.service)
   return {
     projectId: project.id,
     project: project.name,
