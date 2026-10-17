@@ -100,6 +100,8 @@ wave.
 
 ### Spec A — `railpoint link`: add on Railway, write to Namecheap, wait
 
+> Detailed spec: [`specs/spec-a-link.md`](specs/spec-a-link.md) (2026-10-17).
+
 **Problem.** Linking a Railway service to a Namecheap domain is four tabs: Railway's settings to add the
 domain and copy two records, Namecheap's Advanced DNS to paste them without losing the others, then
 refreshing Railway until it turns green. Namecheap's API makes the middle step dangerous (`setHosts`
@@ -144,6 +146,8 @@ Everything under `src/` and `test/`, `package.json`, `tsconfig.json`, `CLAUDE.md
 ## Phase 1 — Ship
 
 ### Spec B — The wizard and the npm release
+
+> Detailed spec: [`specs/spec-b-ship.md`](specs/spec-b-ship.md) (2026-10-17).
 
 **Problem.** After A3 the command works for someone who knows three names and has six environment
 variables set. The README promises `railpoint` with no arguments and `npx railpoint`.
