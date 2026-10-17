@@ -14,7 +14,7 @@ export const configPath = () => join(process.env.RAILPOINT_CONFIG_DIR ?? join(ho
 
 type ConfigFile = { railwayToken?: string; namecheap?: Partial<Credentials['namecheap']> }
 
-function readConfig(): ConfigFile {
+export function readConfig(): ConfigFile {
   try {
     return JSON.parse(readFileSync(configPath(), 'utf8'))
   } catch (e) {
@@ -35,10 +35,9 @@ export function saveCredentials(partial: ConfigFile): void {
   chmodSync(path, 0o600) // `mode` only applies when the file is created
 }
 
-// The environment wins over ~/.railpoint/config.json, value by value.
-export function loadCredentials(): Credentials {
+// The environment wins over ~/.railpoint/config.json (or `file`, its contents as the wizard has them), value by value.
+export function loadCredentials(file: ConfigFile = readConfig()): Credentials {
   const env = process.env
-  const file = readConfig()
   const namecheap = file.namecheap ?? { sandbox: false }
   const apiUser = env.NAMECHEAP_API_USER || namecheap.apiUser
   return {

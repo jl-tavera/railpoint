@@ -39,6 +39,9 @@ async function request(auth: NamecheapAuth, command: string, params: Record<stri
 // Namecheap's SLD/TLD split: the first label, then the rest (example.co.uk → example + co.uk).
 const split = (zone: string) => ({ SLD: zone.slice(0, zone.indexOf('.')), TLD: zone.slice(zone.indexOf('.') + 1) })
 
+// The cheapest read, to prove the credentials before they are saved; returns them.
+export const checkAuth = async (auth: NamecheapAuth) => (await request(auth, 'namecheap.domains.getList', { PageSize: 10 }), auth)
+
 export async function findZone(auth: NamecheapAuth, name: string): Promise<{ zone: string; host: string }> {
   const owned: string[] = []
   for (let page = 1; ; page++) {
