@@ -3,7 +3,7 @@ import type { NamecheapAuth } from './config.ts'
 import { assertOurDns, findZone, getHosts, setHosts } from './namecheap.ts'
 import { RailpointError } from './output.ts'
 import { apply, plan, sameValue, type Change, type Conflict } from './plan.ts'
-import { customDomainCreate, customDomainStatus, findCustomDomain, resolveTarget, type DnsRecord, type DomainStatus, type Target } from './railway.ts'
+import { customDomainCreate, customDomainStatus, find, findCustomDomain, listProjects, projectCreate, resolveTarget, serviceCreate, type DnsRecord, type DomainStatus, type Target } from './railway.ts'
 
 export type LinkOptions = { domain: string; project: string; environment: string; service: string; token: string; namecheap: NamecheapAuth; force: boolean; wait: boolean; timeout: number }
 
@@ -83,4 +83,21 @@ export async function link(opts: LinkOptions, deps: LinkDeps = {}): Promise<Link
   if (opts.wait) await waitForReady(opts.token, railwayDomain.id, target.projectId, opts.timeout, deps)
 
   return { domain: railwayDomain.domain, target, railwayDomainId: railwayDomain.id, created: !existing, records: railwayDomain.records, zone, changes, written, status: opts.wait ? 'ready' : 'written' }
+}
+
+export type CreateOptions = Omit<LinkOptions, 'project' | 'environment' | 'service'> & { repo: string; project?: string; service?: string; branch?: string }
+
+export type CreateResult = LinkResult & { projectCreated: boolean; serviceCreated: boolean }
+
+// Creates the project and the service from the repo when they are missing, then links. Like `link`, re-running is safe.
+export async function create(opts: CreateOptions, deps: LinkDeps = {}): Promise<CreateResult> {
+  const name = opts.repo.split('/')[1]
+  const projectName = opts.project ?? name
+  const serviceName = opts.service ?? name
+  const project = find('project', await listProjects(opts.token), projectName)
+  const projectId = project?.id ?? (await projectCreate(opts.token, projectName))
+  const service = project && find('service', project.services, serviceName)
+  const serviceId = service?.id ?? (await serviceCreate(opts.token, projectId, serviceName, opts.repo, opts.branch))
+  const result = await link({ ...opts, project: projectId, environment: 'production', service: serviceId }, deps)
+  return { ...result, projectCreated: !project, serviceCreated: !service }
 }
