@@ -1,3 +1,6 @@
 # Local-only: planning docs and agent instructions
 resources/
 CLAUDE.md
+node_modules/
+dist/
+.env
