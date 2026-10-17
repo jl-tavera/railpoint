@@ -11,17 +11,28 @@ const projects = {
 }
 const existing = { data: { domains: { customDomains: [{ ...fixture('customDomain').data.customDomain, domain: 'App.Example.com' }] } } }
 const none = { data: { domains: { customDomains: [] } } }
-const args = ['link', 'app.example.com', '--project', 'my-app', '--service', 'api', '--json']
+const args = ['link', 'app.example.com', '--project', 'my-app', '--service', 'api', '--json', '--no-wait']
+const waiting = args.filter((a) => a !== '--no-wait')
+const raw = fixture('customDomain').data.customDomain
+const status = (record: string, cert: string, verified = true) =>
+  ({ data: { customDomain: { status: { ...raw.status, dnsRecords: [{ ...raw.status.dnsRecords[0], currentValue: record === 'PROPAGATED' ? raw.status.dnsRecords[0].requiredValue : 'old.example.net', status: `DNS_RECORD_STATUS_${record}` }], verified, certificateStatus: `CERTIFICATE_STATUS_TYPE_${cert}` } } } })
+const pending = status('REQUIRES_UPDATE', 'VALIDATING_OWNERSHIP', false)
+const ready = status('PROPAGATED', 'VALID')
+// A fake clock: sleeping only moves `now` forward.
+const clock = () => {
+  const c = { t: 0, sleeps: [] as number[], now: () => c.t, sleep: async (ms: number) => { c.sleeps.push(ms); c.t += ms } }
+  return c
+}
 // The Namecheap reads before a write: two pages of domains, the nameserver check, the hosts.
 const zoneReads = (hosts = xml('getHosts')) => [xml('getList-page1'), xml('getList-page2'), xml('dns-getList-true'), hosts]
 const withHosts = (...lines: string[]) => xml('getHosts').replace('</DomainDNSGetHostsResult>', lines.join('') + '</DomainDNSGetHostsResult>')
 const host = (name: string, type: string, address: string) => `<host Name="${name}" Type="${type}" Address="${address}" MXPref="10" TTL="1800" />`
 
 // Runs the CLI, capturing stdout only while it runs (the test runner reports over stdout too).
-async function run(argv: string[]) {
+async function run(argv: string[], deps = {}) {
   const out: string[] = []
   const write = mock.method(process.stdout, 'write', (chunk: string) => (out.push(chunk), true))
-  const code = await main(argv).finally(() => write.mock.restore())
+  const code = await main(argv, deps).finally(() => write.mock.restore())
   return { code, ...JSON.parse(out.join('')) }
 }
 
@@ -66,8 +77,10 @@ test('success prints one {ok, data} envelope with the target and records', async
         { action: 'create', record: { name: 'verification-host.app', type: 'TXT', address: 'verification-token', ttl: 300, mxPref: 10 } },
       ],
       written: true,
+      status: 'written',
     },
   })
+  assert.equal(calls.length, 8, '--no-wait makes no status call')
 })
 
 test('failure prints one {ok: false, error: {code, message, hint}} envelope and exits 1', async () => {
@@ -143,4 +156,37 @@ test('a Railway label that disagrees with the Namecheap zone is refused before t
   assert.equal(code, 1)
   assert.equal(error.code, 'UNSUPPORTED_RECORD')
   assert.equal(calls.length, 4)
+})
+
+test('link polls every 5 s until every record is valid and the certificate issued', async () => {
+  const c = clock()
+  const calls = stubFetch(projects, existing, ...zoneReads(), xml('setHosts'), pending, pending, ready)
+  const { code, data } = await run(waiting, c)
+  assert.equal(code, 0)
+  assert.equal(data.status, 'ready')
+  assert.deepEqual(c.sleeps, [5000, 5000])
+  assert.deepEqual(calls.slice(-3).map((x) => x.variables), Array(3).fill({ id: 'domain-id', projectId: 'p1' }))
+})
+
+test('still pending at the timeout is TIMEOUT naming the pending record and the certificate status', async () => {
+  const c = clock()
+  stubFetch(projects, existing, ...zoneReads(), xml('setHosts'), pending, pending, pending)
+  const { code, error } = await run([...waiting, '--timeout', '10'], c)
+  assert.equal(code, 1)
+  assert.equal(error.code, 'TIMEOUT')
+  assert.match(error.message, /app: old\.example\.net \(needs routing-value\.up\.railway\.app\)/)
+  assert.match(error.message, /verification-host\.app: not verified yet/)
+  assert.match(error.message, /CERTIFICATE_STATUS_TYPE_VALIDATING_OWNERSHIP/)
+  assert.match(error.hint, /re-run/)
+  assert.deepEqual(c.sleeps, [5000, 5000])
+})
+
+test('a failing status check goes to stderr and the loop carries on', async (t) => {
+  const c = clock()
+  const stderr = t.mock.method(process.stderr, 'write', () => true)
+  stubFetch(projects, existing, ...zoneReads(), xml('setHosts'), new Response('', { status: 502 }), ready)
+  const { code, data } = await run(waiting, c)
+  assert.equal(code, 0)
+  assert.equal(data.status, 'ready')
+  assert.match(String(stderr.mock.calls[0].arguments[0]), /502/)
 })
