@@ -1,13 +1,19 @@
+import { setTimeout as delay } from 'node:timers/promises'
 import type { NamecheapAuth } from './config.ts'
 import { assertOurDns, findZone, getHosts, setHosts } from './namecheap.ts'
 import { RailpointError } from './output.ts'
 import { apply, plan, sameValue, type Change, type Conflict } from './plan.ts'
-import { customDomainCreate, findCustomDomain, resolveTarget, type DnsRecord, type Target } from './railway.ts'
+import { customDomainCreate, customDomainStatus, findCustomDomain, resolveTarget, type DnsRecord, type DomainStatus, type Target } from './railway.ts'
 
-export type LinkOptions = { domain: string; project: string; environment: string; service: string; token: string; namecheap: NamecheapAuth; force: boolean }
+export type LinkOptions = { domain: string; project: string; environment: string; service: string; token: string; namecheap: NamecheapAuth; force: boolean; wait: boolean; timeout: number }
 
-// `confirm` is only passed in a TTY; without it a conflict fails the run.
-export type LinkDeps = { confirm?: (conflicts: Conflict[]) => Promise<boolean> }
+// `confirm` and `progress` are only passed in a TTY; without `confirm` a conflict fails the run.
+export type LinkDeps = {
+  confirm?: (conflicts: Conflict[]) => Promise<boolean>
+  progress?: (message: string) => void
+  sleep?: (ms: number) => Promise<void>
+  now?: () => number
+}
 
 export type LinkResult = {
   domain: string
@@ -18,6 +24,33 @@ export type LinkResult = {
   zone: string
   changes: Change[]
   written: boolean
+  status: 'ready' | 'written'
+}
+
+const POLL_MS = 5_000
+
+const describePending = (s: DomainStatus) => [
+  ...s.records.filter((r) => !r.ready).map((r) => `${r.hostlabel}: ${r.currentValue || 'nothing'} (needs ${r.requiredValue})`),
+  ...(s.certificateIssued ? [] : [`certificate: ${s.certificateStatus}`]),
+]
+
+// Polls Railway until it reports every record valid and the certificate issued, or the timeout passes.
+async function waitForReady(token: string, id: string, projectId: string, timeout: number, deps: LinkDeps): Promise<void> {
+  const now = deps.now ?? Date.now
+  const sleep = deps.sleep ?? delay
+  const deadline = now() + timeout * 1000
+  let pending = ['no status from Railway yet']
+  for (;;) {
+    try {
+      pending = describePending(await customDomainStatus(token, id, projectId))
+      if (!pending.length) return
+      deps.progress?.(`Waiting for Railway: ${pending.join(', ')}`)
+    } catch (err) {
+      process.stderr.write(`status check failed, retrying: ${err instanceof Error ? err.message : String(err)}\n`)
+    }
+    if (now() >= deadline) throw new RailpointError('TIMEOUT', `Not ready after ${timeout}s: ${pending.join('; ')}`, 're-run `railpoint link` later; it picks up where it left off')
+    await sleep(POLL_MS)
+  }
 }
 
 export const describeConflict = (c: Conflict) => `${c.existing.name} ${c.existing.type} ${c.existing.address} → ${c.record.type} ${c.record.address}`
@@ -47,6 +80,7 @@ export async function link(opts: LinkOptions, deps: LinkDeps = {}): Promise<Link
   }
   const written = changes.some((c) => c.action !== 'skip')
   if (written) await setHosts(nc, zone, apply(hosts, changes), emailType)
+  if (opts.wait) await waitForReady(opts.token, railwayDomain.id, target.projectId, opts.timeout, deps)
 
-  return { domain: railwayDomain.domain, target, railwayDomainId: railwayDomain.id, created: !existing, records: railwayDomain.records, zone, changes, written }
+  return { domain: railwayDomain.domain, target, railwayDomainId: railwayDomain.id, created: !existing, records: railwayDomain.records, zone, changes, written, status: opts.wait ? 'ready' : 'written' }
 }
