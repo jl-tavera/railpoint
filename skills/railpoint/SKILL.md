@@ -28,6 +28,16 @@ npx -y railpoint link <domain> --project <name|id> --service <name|id> [--enviro
 - It prints one JSON line and exits 0 or 1 (a bad flag prints usage to stderr instead, with no JSON). It can wait up to 5 minutes (`--timeout <s>` to change).
 - Re-running is safe: whatever is in place is skipped, so a re-run is also the status check.
 
+No Railway service yet, but a GitHub repo? `create` makes the project and the service (both named after the repo
+unless `--project`/`--service` say otherwise; existing ones are reused), then links the same way:
+
+```sh
+npx -y railpoint create <domain> --repo <owner/name> [--project <name|id>] [--service <name>] [--branch <b>] --json
+```
+
+Its JSON adds `projectCreated` and `serviceCreated`. A `RAILWAY_ERROR` naming the repo means Railway's GitHub app
+can't reach it; tell the user to grant it access.
+
 Success looks like `{"ok":true,"data":{"domain":…,"zone":…,"created":…,"written":…,"status":"ready","changes":[…]}}`.
 Report the domain, whether it was created or already there, and the record changes.
 
