@@ -1,6 +1,6 @@
 import { XMLParser } from 'fast-xml-parser'
 import type { NamecheapAuth } from './config.ts'
-import { RailpointError } from './output.ts'
+import { debug, RailpointError } from './output.ts'
 import type { HostRecord } from './plan.ts'
 
 const parser = new XMLParser({
@@ -24,11 +24,14 @@ async function request(auth: NamecheapAuth, command: string, params: Record<stri
   const url = `https://api.${auth.sandbox ? 'sandbox.' : ''}namecheap.com/xml.response`
   const all = new URLSearchParams({ ApiUser: auth.apiUser, ApiKey: auth.apiKey, UserName: auth.username, ClientIp: auth.clientIp, Command: command })
   for (const [k, v] of Object.entries(params)) all.set(k, String(v))
+  debug(`namecheap → ${method} ${url}`, new URLSearchParams({ ...Object.fromEntries(all), ApiKey: 'REDACTED' }).toString())
   const res = method === 'GET'
     ? await fetch(`${url}?${all}`, { signal: AbortSignal.timeout(15_000) })
     : await fetch(url, { method, body: all, signal: AbortSignal.timeout(15_000) })
+  const text = await res.text()
+  debug(`namecheap ← ${res.status}`, text)
   if (!res.ok) throw new RailpointError('NAMECHEAP_ERROR', `Namecheap answered ${res.status} ${res.statusText}`.trim())
-  const body = parser.parse(await res.text()).ApiResponse
+  const body = parser.parse(text).ApiResponse
   if (body?.Status !== 'OK') {
     const first = body?.Errors?.Error?.[0]
     throw toError(auth, String(first?.['#text'] ?? first ?? 'Namecheap returned an error without a message'))

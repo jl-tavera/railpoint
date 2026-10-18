@@ -121,6 +121,7 @@ Each credential overrides the same value in `~/.railpoint/config.json`.
 | `NAMECHEAP_CLIENT_IP` | no | this machine's public IP, from api.ipify.org |
 | `NAMECHEAP_SANDBOX` | no | off; `1` uses Namecheap's sandbox API |
 | `RAILPOINT_CONFIG_DIR` | no | `~/.railpoint` |
+| `RAILPOINT_DEBUG` | no | off; `1` writes every Railway and Namecheap request and raw response to stderr, with the Namecheap API key redacted |
 
 ## What it touches
 
