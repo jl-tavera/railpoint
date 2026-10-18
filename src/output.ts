@@ -23,3 +23,8 @@ export function fail(err: unknown, json: boolean): void {
   if (json) process.stdout.write(JSON.stringify({ ok: false, error: { code: e.code, message: e.message, hint: e.hint ?? null } }) + '\n')
   else process.stderr.write(`error ${e.code}: ${e.message}\n` + (e.hint ? `hint: ${e.hint}\n` : ''))
 }
+
+// RAILPOINT_DEBUG=1: every API request and raw response, on stderr so stdout stays the one JSON line.
+export function debug(label: string, text: string): void {
+  if (process.env.RAILPOINT_DEBUG === '1') process.stderr.write(`[railpoint] ${label} ${text}\n`)
+}

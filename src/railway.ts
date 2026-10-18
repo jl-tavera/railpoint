@@ -1,4 +1,4 @@
-import { RailpointError } from './output.ts'
+import { debug, RailpointError } from './output.ts'
 
 const API = 'https://backboard.railway.com/graphql/v2'
 
@@ -37,13 +37,18 @@ const RECORD_TYPES: Record<string, DnsRecord['type']> = {
 }
 
 async function gql<T>(token: string, query: string, variables: Record<string, unknown> = {}): Promise<T> {
+  const request = JSON.stringify({ query, variables })
+  debug('railway →', request) // the token is a header and never written
   const res = await fetch(API, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-    body: JSON.stringify({ query, variables }),
+    body: request,
     signal: AbortSignal.timeout(15_000),
   })
-  const body = await res.json().catch(() => null) as { data?: T; errors?: { message: string }[] } | null
+  const text = await res.text()
+  debug(`railway ← ${res.status}`, text)
+  let body: { data?: T; errors?: { message: string }[] } | null = null
+  try { body = JSON.parse(text) } catch {}
   const message = body?.errors?.[0]?.message
   if (!res.ok || message || !body?.data) throw new RailpointError('RAILWAY_ERROR', message ?? `Railway answered ${res.status} ${res.statusText}`.trim())
   return body.data
