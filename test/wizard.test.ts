@@ -44,7 +44,16 @@ function prompts(...answers: (string | symbol)[]) {
     cancel: () => {},
     log: { message: () => {}, error: (m: string) => errors.push(stripVTControlCharacters(m)) },
     password: async (o: { message: string }) => (asked.push({ kind: 'password', message: o.message }), next()),
-    text: async (o: { message: string; initialValue?: string }) => (asked.push({ kind: 'text', message: o.message, initialValue: o.initialValue }), next()),
+    // Like clack, an answer `validate` refuses is reported and the same prompt asked again.
+    text: async (o: { message: string; initialValue?: string; validate?: (v: string) => string | undefined }) => {
+      asked.push({ kind: 'text', message: o.message, initialValue: o.initialValue })
+      for (;;) {
+        const a = next()
+        const invalid = typeof a === 'string' && o.validate?.(a)
+        if (!invalid) return a
+        errors.push(invalid)
+      }
+    },
     select: async (o: { message: string; options: { label?: string; value: unknown }[] }) => {
       asked.push({ kind: 'select', message: o.message, options: o.options.map((x) => x.label!) })
       const a = next()
@@ -78,6 +87,15 @@ test('credentials already present are not asked, and nothing is saved', async ()
   assert.deepEqual(asked.map((a) => a.kind), ['select', 'select', 'select', 'text'])
   assert.equal(opts?.service, 'p1-web')
   assert.throws(() => saved(), { code: 'ENOENT' })
+})
+
+test('the domain prompt refuses what the domain rule refuses, and returns the name as the rule gives it', async () => {
+  Object.assign(process.env, { RAILWAY_TOKEN: 'tok', NAMECHEAP_API_USER: 'user', NAMECHEAP_API_KEY: 'key', NAMECHEAP_CLIENT_IP: '203.0.113.7' })
+  stubFetch(projects, xml('getList-page1'))
+  const { errors, prompts: p } = prompts('blog', 'production', 'web', 'x y', ' Blog.Example.com. ')
+  const opts = await runWizard(p)
+  assert.equal(errors.length, 1)
+  assert.equal(opts?.domain, 'blog.example.com')
 })
 
 test('a cancel returns nothing, saves nothing and calls no API', async () => {

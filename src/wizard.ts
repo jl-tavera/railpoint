@@ -1,7 +1,7 @@
 import { styleText } from 'node:util'
 import * as clack from '@clack/prompts'
 import { configPath, loadCredentials, publicIp, readConfig, requireNamecheap, saveCredentials, type Credentials } from './config.ts'
-import type { LinkOptions } from './link.ts'
+import { parseDomain, type LinkOptions } from './link.ts'
 import { apiAccessPage, checkAuth, whitelistPage } from './namecheap.ts'
 import { RailpointError } from './output.ts'
 import { listProjects } from './railway.ts'
@@ -36,8 +36,6 @@ export function showError(err: unknown, p: Prompts = clack, nc?: Credentials['na
   const h = err instanceof RailpointError ? hint(err, () => nc ?? loadCredentials().namecheap) : undefined
   p.log.error((err instanceof Error ? err.message : String(err)) + (h ? `\n${purple(h)}` : ''))
 }
-
-const HOSTNAME = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i
 
 // Thrown when the user cancels a prompt; the CLI exits 0 with "cancelled".
 export class Cancelled extends Error {}
@@ -115,9 +113,9 @@ export async function runWizard(p: Prompts = clack): Promise<LinkOptions | undef
     const domain = answer(await p.text({
       message: label('Domain to link'),
       placeholder: 'app.example.com',
-      validate: (v) => (HOSTNAME.test(v?.trim() ?? '') ? undefined : 'Enter a hostname, like app.example.com'),
-    })).trim()
-    return { domain, project: project.id, environment: environment.id, service: service.id, token, namecheap: auth, force: false, wait: true, timeout: 300 }
+      validate: (v) => { try { parseDomain(v ?? '') } catch { return 'Enter a hostname, like app.example.com' } },
+    }))
+    return { domain: parseDomain(domain), project: project.id, environment: environment.id, service: service.id, token, namecheap: auth, force: false, wait: true, timeout: 300 }
   } catch (err) {
     if (!(err instanceof Cancelled)) throw err
     p.cancel('cancelled')

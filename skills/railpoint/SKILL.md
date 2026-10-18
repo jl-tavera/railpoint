@@ -54,6 +54,7 @@ A failure prints `{"ok":false,"error":{"code":…,"message":…,"hint":…}}`. P
 | Code | What to do |
 | --- | --- |
 | `DNS_CONFLICT` | Show the user the record from `message` that would be replaced. Re-run with `--force` only after they say yes. |
+| `INVALID_DOMAIN` | The domain isn't a hostname. Ask the user for the exact name, like `app.example.com`. |
 | `TIMEOUT` | The records are written; Railway is still verifying. Re-run later to check. |
 | `NAMECHEAP_IP_NOT_WHITELISTED` | Get the IP with `curl https://api.ipify.org` and tell the user to whitelist it in Namecheap. |
 | `RAILWAY_ERROR` with `Not Authorized` | The token is a project token or revoked; tell the user to create an account or workspace token. |

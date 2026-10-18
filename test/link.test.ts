@@ -190,3 +190,20 @@ test('a failing status check goes to stderr and the loop carries on', async (t) 
   assert.equal(data.status, 'ready')
   assert.match(String(stderr.mock.calls[0].arguments[0]), /502/)
 })
+
+test('the domain is trimmed, lowercased and loses one trailing dot before Railway sees it', async () => {
+  const calls = stubFetch(projects, none, fixture('customDomainCreate'), ...zoneReads(), xml('setHosts'))
+  const { code } = await run(['link', ' APP.Example.com. ', ...args.slice(2)])
+  assert.equal(code, 0)
+  assert.equal(calls[2].variables.input.domain, 'app.example.com')
+})
+
+test('a name that is not a hostname is INVALID_DOMAIN, before any request', async () => {
+  const calls = stubFetch()
+  const { code, ok, error } = await run(['link', 'x y', ...args.slice(2)])
+  assert.equal(code, 1)
+  assert.equal(ok, false)
+  assert.equal(error.code, 'INVALID_DOMAIN')
+  assert.ok(error.hint)
+  assert.equal(calls.length, 0)
+})

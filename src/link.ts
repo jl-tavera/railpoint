@@ -53,6 +53,15 @@ async function waitForReady(token: string, id: string, projectId: string, timeou
   }
 }
 
+const HOSTNAME = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
+
+// The one domain rule, for the command and the wizard alike: the name as Railway and Namecheap should see it.
+export function parseDomain(raw: string): string {
+  const domain = raw.trim().toLowerCase().replace(/\.$/, '')
+  if (!HOSTNAME.test(domain)) throw new RailpointError('INVALID_DOMAIN', `"${raw}" is not a hostname`, 'pass a name like app.example.com')
+  return domain
+}
+
 export const describeConflict = (c: Conflict) => `${c.existing.name} ${c.existing.type} ${c.existing.address} → ${c.record.type} ${c.record.address}`
 
 // Idempotent: a domain already on the target is reused and equal records are skipped, so re-running is the status check.
