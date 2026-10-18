@@ -143,6 +143,7 @@ With `--json`, or whenever stdout isn't a terminal, railpoint prints one JSON li
 
 | Code | When |
 | --- | --- |
+| `INVALID_DOMAIN` | `<domain>` isn't a hostname like `app.example.com`. |
 | `MISSING_CREDENTIALS` | A required credential isn't set, or the public IP can't be found. |
 | `NAMECHEAP_IP_NOT_WHITELISTED` | Namecheap rejected this machine's IP. |
 | `NAMECHEAP_AUTH_FAILED` | Namecheap rejected the API user or key. |

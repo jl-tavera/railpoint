@@ -2,7 +2,7 @@
 import { parseArgs } from 'node:util'
 import { cancel, confirm, spinner } from '@clack/prompts'
 import { loadCredentials, requireNamecheap, requireRailway } from './config.ts'
-import { create, describeConflict, link, type CreateOptions, type CreateResult, type LinkDeps, type LinkOptions, type LinkResult } from './link.ts'
+import { create, describeConflict, link, parseDomain, type CreateOptions, type CreateResult, type LinkDeps, type LinkOptions, type LinkResult } from './link.ts'
 import { fail, isJson, ok } from './output.ts'
 import { answer, Cancelled, runWizard, showError, type Prompts } from './wizard.ts'
 
@@ -95,8 +95,9 @@ export async function main(argv: string[], deps: LinkDeps & { prompts?: Prompts 
   }
 
   return run(async () => {
+    const name = parseDomain(domain)
     const creds = loadCredentials()
-    const common = { domain, token: requireRailway(creds), namecheap: await requireNamecheap(creds), force, wait, timeout }
+    const common = { domain: name, token: requireRailway(creds), namecheap: await requireNamecheap(creds), force, wait, timeout }
     return command === 'create' ? { ...common, repo: repo!, project, service, branch } : { ...common, project: project!, environment: environment ?? 'production', service: service! }
   }, isJson({ json }), linkDeps)
 }
