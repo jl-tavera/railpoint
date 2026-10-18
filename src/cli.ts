@@ -111,4 +111,8 @@ export async function main(argv: string[], deps: LinkDeps & { prompts?: Prompts 
   }, isJson({ json }), linkDeps)
 }
 
-if (import.meta.main) process.exitCode = await main(process.argv.slice(2))
+if (import.meta.main) {
+  // clack's spinner listens for SIGINT, which turns off Node's default exit; Ctrl-C must still stop the link.
+  process.on('SIGINT', () => process.exit(130))
+  process.exitCode = await main(process.argv.slice(2))
+}
