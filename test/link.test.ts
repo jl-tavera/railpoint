@@ -1,6 +1,7 @@
 import { test, beforeEach, mock } from 'node:test'
 import assert from 'node:assert/strict'
 import { tmpdir } from 'node:os'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fixture, stubFetch, xml } from './stub.ts'
 import { main } from '../src/cli.ts'
@@ -190,6 +191,19 @@ test('a failing status check goes to stderr and the loop carries on', async (t) 
   assert.equal(data.status, 'ready')
   assert.match(String(stderr.mock.calls[0].arguments[0]), /502/)
 })
+
+for (const flag of ['--help', '-h', '--version', '-v']) {
+  test(`${flag} prints to stdout and exits 0`, async (t) => {
+    const stderr = t.mock.method(process.stderr, 'write', () => true)
+    const out: string[] = []
+    const write = mock.method(process.stdout, 'write', (chunk: string) => (out.push(chunk), true))
+    const code = await main([flag]).finally(() => write.mock.restore())
+    assert.equal(code, 0)
+    assert.equal(stderr.mock.callCount(), 0)
+    if (flag.includes('h')) assert.match(out.join(''), /usage: railpoint[\s\S]*--version[\s\S]*github\.com\/jl-tavera\/railpoint/)
+    else assert.equal(out.join(''), JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version + '\n')
+  })
+}
 
 test('the domain is trimmed, lowercased and loses one trailing dot before Railway sees it', async () => {
   const calls = stubFetch(projects, none, fixture('customDomainCreate'), ...zoneReads(), xml('setHosts'))

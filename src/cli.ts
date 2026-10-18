@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { cancel, confirm, spinner } from '@clack/prompts'
 import { loadCredentials, requireNamecheap, requireRailway } from './config.ts'
@@ -6,7 +7,7 @@ import { create, describeConflict, link, parseDomain, type CreateOptions, type C
 import { fail, isJson, ok } from './output.ts'
 import { answer, Cancelled, runWizard, showError, type Prompts } from './wizard.ts'
 
-const USAGE = 'usage: railpoint                (interactive, in a terminal)\n       railpoint link <domain> --project <name|id> --service <name|id> [--environment <name|id>] [--force] [--timeout <s>] [--no-wait] [--json]\n       railpoint create <domain> --repo <owner/name> [--project <name|id>] [--service <name>] [--branch <b>] [--force] [--timeout <s>] [--no-wait] [--json]'
+const USAGE = 'usage: railpoint                (interactive, in a terminal)\n       railpoint link <domain> --project <name|id> --service <name|id> [--environment <name|id>] [--force] [--timeout <s>] [--no-wait] [--json]\n       railpoint create <domain> --repo <owner/name> [--project <name|id>] [--service <name>] [--branch <b>] [--force] [--timeout <s>] [--no-wait] [--json]\n       railpoint --help | --version\n\nhttps://github.com/jl-tavera/railpoint'
 
 function table(rows: string[][]): string {
   const widths = rows[0].map((_, i) => Math.max(...rows.map((r) => r[i].length)))
@@ -79,10 +80,18 @@ export async function main(argv: string[], deps: LinkDeps & { prompts?: Prompts 
         wait: { type: 'boolean', default: true },
         timeout: { type: 'string', default: '300' },
         json: { type: 'boolean', default: false },
+        help: { type: 'boolean', short: 'h' },
+        version: { type: 'boolean', short: 'v' },
       },
     })
   } catch {
     parsed = undefined
+  }
+  if (parsed?.values.help || parsed?.values.version) {
+    // package.json is one level up from src/ and dist/ alike.
+    const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+    process.stdout.write((parsed.values.help ? USAGE : version) + '\n')
+    return 0
   }
   const [command, domain, ...extra] = parsed?.positionals ?? []
   const { project, service, environment, repo, branch, force = false, wait = true, json } = parsed?.values ?? {}

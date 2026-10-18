@@ -65,7 +65,7 @@ project, environment and service from lists and type the domain. The link runs a
 prompt exits 0.
 
 The wizard never runs headless. `railpoint` with no arguments outside a terminal, or with `--json`, prints
-usage and exits 1.
+usage and exits 1. `railpoint --help` (`-h`) prints usage and `railpoint --version` (`-v`) the version, both exiting 0.
 
 ## `link` flags
 
